@@ -48,14 +48,6 @@
 #define BAND    915E6  // 915E6
 #define PABOOST true
 
-/* AES Encryption Library Stuff */
-/*#include "AES.h"
-  AES aes ;
-  static uint8_t bits = 128;
-  byte iv [N_BLOCK] ;
-  byte *key = (unsigned char*)"0123456789010123";
-  unsigned long long int my_iv = 36753562;*/
-
 String outgoing;              // outgoing message
 byte msgCount = 0;            // count of outgoing messages
 byte localAddress = 0xE2;     // address of this device
@@ -267,7 +259,7 @@ void addToRepeat(String incoming) {
 
 void addToSent(String outs) {
   
-  // add to stack if not already in the repeat list
+  // add to stack if not already in the sent list
   int inc = 0;
   boolean found = sentAlready(outs);
  
@@ -280,27 +272,29 @@ void addToSent(String outs) {
   while (inc <= 7) {
     if (sent[inc].equals("")) {
       // add to free spot
-      if (Serial) {
-        //Serial.print("Added repeat to spot #");
-       // Serial.print(inc);
-      }
       sent[inc].reserve(outs.length() + 1);
       sent[inc] = outs;
       found = true;
     }
     inc++;
   }
-  
+
+  // rolling buffer, keep the last 3 that was sent
+  String sent_bkup[3]={ sent[5], sent[6], sent[7] };
   if (!found){
     sent[0].reserve(outs.length() + 1);
     sent[0] = outs;
     inc = 1;      
     while (inc <= 7) {
-      sent[inc]="";
-      sent[inc].trim();      
+      if (inc<3){
+        sent[inc]=sent_bkup[inc-1];
+      }else{
+        sent[inc]="";
+        sent[inc].trim();
+      }       
+      inc++;     
     }
   }
-    
   
 }
 
@@ -471,8 +465,7 @@ void onReceive(int packetSize) {
   }
 
   String imsg = decrypt(incoming);
-  //Serial.println(imsg);
-
+  
   if (imsg.indexOf("</E") > -1) {
 
     //doBuzzer();
@@ -502,7 +495,7 @@ void onReceive(int packetSize) {
     }
 
     // do not show distant echoes of what was last sent from this node
-    if (lastSent.equals(incoming))
+    if (sentAlready(incoming))
       show = false;
 
     if (Serial && show) {
