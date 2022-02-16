@@ -57,7 +57,6 @@ long lastReceivedTime = 0;    // last received time
 int interval = 2000;          // interval between sends
 
 String lastSent = "";
-String lastIncoming = "";
 String toRepeat[8] = {"", "", "", "", "", "", "", ""};
 String sent[8] = {"", "", "", "", "", "", "", ""};
 boolean repeat = false;
@@ -287,6 +286,7 @@ void addToSent(String outs) {
     inc = 1;      
     while (inc <= 7) {
       if (inc<3){
+        sent[inc].reserve(sent_bkup[inc-1].length() + 1);
         sent[inc]=sent_bkup[inc-1];
       }else{
         sent[inc]="";
@@ -478,25 +478,22 @@ void onReceive(int packetSize) {
     //Serial.println("Message length: " + String(incomingLength));
 
     // check to see if this message is in the 'to repeat' list
-    boolean show = true;  
-
-    // repeater filter
-    if (!lastIncoming.equals(incoming)) {
-      lastReceivedTime = millis();
-      if (imsg.indexOf("Ping from ")!=0){
-        lastIncoming = incoming;
-        if (!sentAlready(incoming))
-          addToRepeat(incoming);  
-      }            
-    } else {
-      // do not show repeated message if it was posted under 5 seconds ago
-      if ((millis() - lastReceivedTime) < 5000)
-        show = false;
-    }
-
+    boolean show = true;
+      
     // do not show distant echoes of what was last sent from this node
     if (sentAlready(incoming))
       show = false;
+    
+    // repeater filter
+    if (!sentAlready(incoming)) {
+      lastReceivedTime = millis();
+      if (imsg.indexOf("Ping from ")!=0)
+        addToRepeat(incoming);            
+    } else {
+      // do not show repeated message if it was posted under 5 seconds ago
+      if ((millis() - lastReceivedTime) < 7000)
+        show = false;
+    }    
 
     if (Serial && show) {
       Serial.print("[RSSI: " + String(LoRa.packetRssi()));
