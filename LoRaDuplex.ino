@@ -51,16 +51,12 @@ bool verb=false;
 
 struct mdata{
   char mdata[65];
+  bool sent = false;
 };
 struct sendMessages{
-  mdata messages[4];
+  mdata messages[8];  
 };
 sendMessages theSender;
-
-struct sentMessages{
-  mdata messages[4];
-};
-sentMessages theSent;
 
 char secret_key[7] = { 28, 253, 144, 71, 77, 177, 217 };
 char secret_key2[5] = { 128, 53, 14, 75, 72 };
@@ -74,13 +70,10 @@ void setup() {
   //pinMode(buzzer, OUTPUT);
  
   int inc=0;
-  while (inc < 4){
-    theSent.messages[inc].mdata[0]=char(0);
-    theSent.messages[inc].mdata[1]=char(0);
-    if (inc<4){
-      theSender.messages[inc].mdata[0]=char(0);
-      theSender.messages[inc].mdata[1]=char(0);    
-    }
+  while (inc < 8){
+    theSender.messages[inc].mdata[0]=char(0);
+    theSender.messages[inc].mdata[1]=char(0);
+    theSender.messages[inc].sent = true;    
     inc++;
   }
 
@@ -209,8 +202,8 @@ void sender() {
 
   // pop off the stack
   int inc = 0;
-  while (inc < 4) {
-    if(theSender.messages[inc].mdata[0]!=char(0) ){
+  while (inc < 8) {
+    if(theSender.messages[inc].mdata[0]!=char(0)  && !theSender.messages[inc].sent  ){
       String checkSend = String((char *)theSender.messages[inc].mdata);        
       if (!checkSend.equals("")) {
         lastSendTime = millis();
@@ -221,10 +214,8 @@ void sender() {
           Serial.print(F(" "));
           Serial.println((char *)theSender.messages[inc].mdata);
         }
-        addToSent(checkSend);
         sendBroadcast(checkSend);
-        theSender.messages[inc].mdata[0]=char(0);
-        theSender.messages[inc].mdata[1]=char(0);        
+        theSender.messages[inc].sent = true;       
         return;
       }
     }
@@ -241,7 +232,7 @@ void addToSend(String incoming) {
   // add to stack if not already in the repeat list
   int inc = 0;
   boolean found = false;
-  while (inc < 4) {    
+  while (inc < 8) {    
     if (theSender.messages[inc].mdata[0]!=char(0)){
       String checkSend = String((char *)theSender.messages[inc].mdata);    
       if (checkSend.equals(incoming))
@@ -258,16 +249,17 @@ void addToSend(String incoming) {
 
   // add to the stack if there is a spot available
   inc = 0;
-  while (inc < 4) {
-    if (theSender.messages[inc].mdata[0]==char(0)){
+  while (inc < 8) {
+    if (theSender.messages[inc].sent){
       // add to free spot   
-      incoming.toCharArray(theSender.messages[inc].mdata, 64);   
+      incoming.toCharArray(theSender.messages[inc].mdata, 65);   
       if (Serial && verb){
         Serial.print(F("Added to Send List #"));
         Serial.print(inc);
         Serial.print(F(" ")); 
         Serial.println((char *)theSender.messages[inc].mdata);
-      }      
+      }
+      theSender.messages[inc].sent = false;      
       return;      
     }
     inc++;
@@ -275,63 +267,11 @@ void addToSend(String incoming) {
      
 }
 
-void addToSent(String outs) {
-
-  // add to the stack if not already in the sent list
-  int inc = 0;
-  boolean found = sentAlready(outs);
-
-  // already in the stack
-  if (found)
-    return;
-
-  // add to the stack if there is a spot available
-  inc = 0;
-  while (inc < 4) {
-    if (theSent.messages[inc].mdata[0]==char(0)){
-      // add to free spot
-      outs.toCharArray(theSent.messages[inc].mdata, 65);
-      if (Serial && verb){
-        Serial.print(F("Added to sent list #"));
-        Serial.print(inc);
-        Serial.print(F(" "));
-        Serial.println((char *)theSent.messages[inc].mdata);
-      }
-      found = true;
-      return;
-    }
-    inc++;
-  }
-
-  if (!found){
-    outs.toCharArray(theSent.messages[0].mdata, 65);
-    if (Serial && verb){
-      Serial.print(F("Added to sent list #"));
-      Serial.print(F("0 "));
-      Serial.println((char *)theSent.messages[0].mdata);
-    }
-   
-    theSent.messages[1] = theSent.messages[3];
-    if (Serial && verb){
-      Serial.print(F("Added to sent list #"));
-      Serial.print(F("1 "));
-      Serial.println((char *)theSent.messages[1].mdata);
-    }
-    inc = 2;      
-    while (inc <4) {
-      theSent.messages[inc].mdata[0]=char(0);
-      theSent.messages[inc].mdata[1]=char(0);
-      inc++;     
-    }
-  }
-  
-}
-
 boolean sentAlready(String checkStr){
   int inc = 0;
-  while (inc < 4) {    
-    if (theSent.messages[inc].mdata[0]!=char(0)){
-      String checkSend = String((char *)theSent.messages[inc].mdata);    
+  while (inc < 8) {    
+    if (theSender.messages[inc].mdata[0]!=char(0)){
+      String checkSend = String((char *)theSender.messages[inc].mdata);    
       if (checkSend.equals(checkStr))
         return true;
     }
