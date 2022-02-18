@@ -1,16 +1,4 @@
-/*
-  LoRa Duplex communication
 
-  Sends a message every half second, and polls continually
-  for new incoming messages. Implements a one-byte addressing scheme,
-  with 0xFF as the broadcast address.
-
-  Uses readString() from Stream class to read payload. The Stream class'
-  timeout may affect other functuons, like the radio's callback. For an
-
-  created 28 April 2017
-  by Tom Igoe
-*/
 #include <SPI.h>              // include libraries
 #include <LoRa.h>
 
@@ -53,43 +41,64 @@ byte msgCount = 0;            // count of outgoing messages
 byte localAddress = 0xE2;     // address of this device
 byte destination = 0xE2;      // destination to send to
 long lastSendTime = 0;        // last send time
-long lastReceivedTime = 0;    // last received time
+//long lastReceivedTime = 0;    // last received time
 int interval = 2000;          // interval between sends
-
-String lastSent = "";
-String toRepeat[8] = {"", "", "", "", "", "", "", ""};
-String sent[8] = {"", "", "", "", "", "", "", ""};
-boolean repeat = false;
-String thisIs = "COM1";
-String ret = "";
+boolean sending = false;
+String thisIs = "REPEATER";
 const int buzzer = 5;
 bool firstRun = true;
-char secret_key[12] = { 28, 253, 144, 71, 77, 177, 217, 172, 77, 177, 217, 172 };
-char secret_key2[17] = { 128, 53, 14, 75, 72, 17, 250, 132, 75, 227, 27, 52, 212, 27, 57, 34, 171 };
+bool verb=false;
+
+struct mdata{
+  char mdata[65];
+};
+struct sendMessages{
+  mdata messages[4];
+};
+sendMessages theSender;
+
+struct sentMessages{
+  mdata messages[4];
+};
+sentMessages theSent;
+
+char secret_key[7] = { 28, 253, 144, 71, 77, 177, 217 };
+char secret_key2[5] = { 128, 53, 14, 75, 72 };
 char secret_key3[7] = { 3, 9, 19, 11, 10, 2, 7 };
 
-boolean pinging = false;
+bool pinging = false;
 int pingInterval = 10000;
 byte channels[10] = { 0xE2, 0xF7, 0xA3, 0xB9, 0xC1, 0xC3, 0xD6, 0xD8, 0xA6, 0xE5 };
 
 void setup() {
   //pinMode(buzzer, OUTPUT);
+ 
+  int inc=0;
+  while (inc < 4){
+    theSent.messages[inc].mdata[0]=char(0);
+    theSent.messages[inc].mdata[1]=char(0);
+    if (inc<4){
+      theSender.messages[inc].mdata[0]=char(0);
+      theSender.messages[inc].mdata[1]=char(0);    
+    }
+    inc++;
+  }
 
   Serial.begin(19200);                   // initialize serial
 
   if (Serial)
-    Serial.println("LoRa Duplex");
+    Serial.println(F("LoRa Duplex"));
 
   // override the default CS, reset, and IRQ pins (optional)
   LoRa.setPins(SS, RST, DI0); // set CS, reset, IRQ pin
 
   if (!LoRa.begin(BAND, PABOOST)) {            // initialize ratio at 915 MHz
     if (Serial)
-      Serial.println("LoRa init failed. Check your connections.");
+      Serial.println(F("LoRa init failed. Check your connections."));
     while (true);                       // if failed, do nothing
   }
   if (Serial)
-    Serial.println("LoRa init succeeded.");
+    Serial.println(F("LoRa init succeeded."));
 
 }
 
@@ -97,33 +106,34 @@ void loop() {
 
   // get their handle from serial console
   if (Serial && firstRun) {
-    Serial.println("What is your Handle/Username?");
+    Serial.println(F("What is your Handle/Username?"));
     while (!Serial.available());
     changeName(Serial.readString());
     firstRun = false;
-    Serial.println("");
-    Serial.print("Hi ");
+    Serial.println(F(""));
+    Serial.print(F("Hi "));
     Serial.print(thisIs);
-    Serial.print(", \n");
-    Serial.println("You are setup and ready to start coms! Type ? for commands.");
+    Serial.println(F(", "));
+    Serial.println(F("You are setup and ready to start coms!")); 
+    Serial.println(F("Type '?' for help/commands."));
   }
 
   // pinging out but not if its repeating first
-  if (pinging && !repeat) {
+  if (pinging && !sending) {
     if (millis() - lastSendTime > pingInterval)  {
       lastSendTime = millis();
-      String pingStr="Ping from ";
+      String pingStr=F("Ping from ");
       pingStr.concat(thisIs);
-      pingStr.concat(" </E");
-      addToRepeat(encrypt(pingStr));
-      Serial.println("Pinging out...");
+      pingStr.concat(F(" </E"));
+      addToSend(encrypt(pingStr));
+      Serial.println(F("Pinging out..."));
     }
   }
 
-  // sending/repeating message
-  if (repeat && (millis() - lastSendTime) > interval)
-    repeater();
-
+  // sending/repeating messages
+  if (sending && ((millis() - lastSendTime) > interval))
+    sender();    
+  
   // send message from serial console
   if (Serial) {
     if (Serial.available()) {
@@ -132,19 +142,16 @@ void loop() {
         return;
 
       String message = thisIs;
-      message.concat(": ");
+      message.concat(F(": "));
       message.concat(fromSerial);
-      message.trim(); 
-         
+      message.trim();
       sendMessage(message);
-
+      
       // Testing encryption
       //Serial.println(encrypt(message));
       //Serial.println(decrypt(encrypt(message)));
     }
   }
-
-
 
   // parse for a packet, and call onReceive with the result:
   onReceive(LoRa.parsePacket());
@@ -156,11 +163,12 @@ boolean command_helper(String cmd) {
   cmd.trim();
 
   if (cmd.equals("?")) {
-    Serial.println("**********HELP MENU**********");
-    Serial.println("ping - ping out every 10 seconds until stop command");
-    Serial.println("stop - use stop after various commands that repeat to stop them");
-    Serial.println("channel <1-10> - change the channel ie: channel 2");
-    Serial.println("*****************************");
+    Serial.println(F("**********HELP MENU**********"));
+    Serial.println(F("ping - ping out every 10 seconds until stop command"));
+    Serial.println(F("stop - use stop after various commands that repeat to stop them"));
+    Serial.println(F("channel <1-10> - change the channel ie: channel 2"));
+    Serial.println(F("debug - verbose: prints out log information while in use"));
+    Serial.println(F("*****************************"));
     return true;
   }
 
@@ -177,121 +185,142 @@ boolean command_helper(String cmd) {
   }
 
   if (cmd.equals("ping")) {
-    Serial.println("Starting ping, type 'stop' to stop pinging");
+    Serial.println(F("Starting ping, type 'stop' to stop pinging"));
     pinging = true;
     return true;
   }
 
   if (cmd.equals("stop")) {
-    Serial.println("Stopping...");
+    Serial.println(F("Stopping..."));
     pinging = false;
+    return true;
+  }
+
+  if (cmd.equals("debug")) {
+    Serial.println(F("Debug/Verbose mode toggled"));
+    verb = !verb;    
     return true;
   }
 
   return false;
 }
 
-
-void repeater() {
+void sender() {
 
   // pop off the stack
   int inc = 0;
-  while (inc <= 7) {
-    if (!toRepeat[inc].equals("")) {
-      lastSendTime = millis();
-      interval = random(3000) + 2000;
-      if (Serial) {
-       //Serial.print("Repeating #");
-       // Serial.println(inc);
+  while (inc < 4) {
+    if(theSender.messages[inc].mdata[0]!=char(0) ){
+      String checkSend = String((char *)theSender.messages[inc].mdata);        
+      if (!checkSend.equals("")) {
+        lastSendTime = millis();
+        interval = random(2000) + 1500;
+        if (Serial && verb){
+          Serial.print(F("Sending #"));
+          Serial.print(inc);
+          Serial.print(F(" "));
+          Serial.println((char *)theSender.messages[inc].mdata);
+        }
+        addToSent(checkSend);
+        sendBroadcast(checkSend);
+        theSender.messages[inc].mdata[0]=char(0);
+        theSender.messages[inc].mdata[1]=char(0);        
+        return;
       }
-      sendBroadcast(toRepeat[inc]);
-      toRepeat[inc] = "";
-      toRepeat[inc].trim();
-      return;
     }
     inc++;
   }
-
-  // stop all repeating
-  //if (Serial)
-    //Serial.print("Stopped Repeating");
-
-  repeat = false;
+  
+  if (Serial && verb)
+    Serial.println(F("Stopping Sender"));
+  sending = false;
 }
 
-void addToRepeat(String incoming) {
-  
-  // make sure we are not repeating the last thing we sent
-  if (lastSent.equals(incoming))
-    return;
+void addToSend(String incoming) {
 
   // add to stack if not already in the repeat list
   int inc = 0;
   boolean found = false;
-  while (inc <= 7) {
-    if (toRepeat[inc].equals(incoming))
-      found = true;
+  while (inc < 4) {    
+    if (theSender.messages[inc].mdata[0]!=char(0)){
+      String checkSend = String((char *)theSender.messages[inc].mdata);    
+      if (checkSend.equals(incoming))
+        found = true;
+    }
     inc++;
   }
+  
   // already in the stack
   if (found)
     return;
 
-  repeat = true;
+  sending = true;
+
   // add to the stack if there is a spot available
   inc = 0;
-  while (inc <= 7) {
-    if (toRepeat[inc].equals("")) {
+  while (inc < 4) {
+    if (theSender.messages[inc].mdata[0]==char(0)){
+      // add to free spot   
+      incoming.toCharArray(theSender.messages[inc].mdata, 64);   
+      if (Serial && verb){
+        Serial.print(F("Added to Send List #"));
+        Serial.print(inc);
+        Serial.print(F(" ")); 
+        Serial.println((char *)theSender.messages[inc].mdata);
+      }      
+      return;      
+    }
+    inc++;
+  }
+     
+}
+
+void addToSent(String outs) {
+
+  // add to the stack if not already in the sent list
+  int inc = 0;
+  boolean found = sentAlready(outs);
+
+  // already in the stack
+  if (found)
+    return;
+
+  // add to the stack if there is a spot available
+  inc = 0;
+  while (inc < 4) {
+    if (theSent.messages[inc].mdata[0]==char(0)){
       // add to free spot
-      if (Serial) {
-        //Serial.print("Added repeat to spot #");
-       // Serial.print(inc);
+      outs.toCharArray(theSent.messages[inc].mdata, 65);
+      if (Serial && verb){
+        Serial.print(F("Added to sent list #"));
+        Serial.print(inc);
+        Serial.print(F(" "));
+        Serial.println((char *)theSent.messages[inc].mdata);
       }
-      toRepeat[inc].reserve(incoming.length() + 1);
-      toRepeat[inc] = incoming;
+      found = true;
       return;
     }
     inc++;
   }
-  
-}
 
-void addToSent(String outs) {
-  
-  // add to stack if not already in the sent list
-  int inc = 0;
-  boolean found = sentAlready(outs);
- 
-  // already in the stack
-  if (found)
-    return;
-
-  // add to the stack if there is a spot available
-  inc = 0;
-  while (inc <= 7) {
-    if (sent[inc].equals("")) {
-      // add to free spot
-      sent[inc].reserve(outs.length() + 1);
-      sent[inc] = outs;
-      found = true;
-    }
-    inc++;
-  }
-
-  // rolling buffer, keep the last 3 that was sent
-  String sent_bkup[3]={ sent[5], sent[6], sent[7] };
   if (!found){
-    sent[0].reserve(outs.length() + 1);
-    sent[0] = outs;
-    inc = 1;      
-    while (inc <= 7) {
-      if (inc<3){
-        sent[inc].reserve(sent_bkup[inc-1].length() + 1);
-        sent[inc]=sent_bkup[inc-1];
-      }else{
-        sent[inc]="";
-        sent[inc].trim();
-      }       
+    outs.toCharArray(theSent.messages[0].mdata, 65);
+    if (Serial && verb){
+      Serial.print(F("Added to sent list #"));
+      Serial.print(F("0 "));
+      Serial.println((char *)theSent.messages[0].mdata);
+    }
+   
+    theSent.messages[1] = theSent.messages[3];
+    if (Serial && verb){
+      Serial.print(F("Added to sent list #"));
+      Serial.print(F("1 "));
+      Serial.println((char *)theSent.messages[1].mdata);
+    }
+    inc = 2;      
+    while (inc <4) {
+      theSent.messages[inc].mdata[0]=char(0);
+      theSent.messages[inc].mdata[1]=char(0);
       inc++;     
     }
   }
@@ -300,13 +329,15 @@ void addToSent(String outs) {
 
 boolean sentAlready(String checkStr){
   int inc = 0;
-  boolean found = false;
-  while (inc <= 7) {
-    if (sent[inc].equals(checkStr))
-      found = true;
+  while (inc < 4) {    
+    if (theSent.messages[inc].mdata[0]!=char(0)){
+      String checkSend = String((char *)theSent.messages[inc].mdata);    
+      if (checkSend.equals(checkStr))
+        return true;
+    }
     inc++;
   }
-  return found;
+  return false;
 }
 
 void channelSelector(int channel) {
@@ -319,7 +350,7 @@ void channelSelector(int channel) {
 
   localAddress = channels[channel];
   destination = channels[channel];
-  Serial.print("Channel changed to ");
+  Serial.print(F("Channel changed to "));
   Serial.println((channel + 1));
 }
 
@@ -379,15 +410,12 @@ void doBuzzer() {
 }
 
 void sendMessage(String message) {
-  
-  if (message.length() <= 64) {
+  String lastSent = "";
+  if (message.length() <= 61) {
     lastSent=message;
-    
     Serial.println(lastSent);
     lastSent.concat("</E");
-    
-    addToRepeat(encrypt(lastSent));
-    lastSent = encrypt(lastSent);
+    addToSend(encrypt(lastSent));
     return;
   }
 
@@ -406,18 +434,16 @@ void sendMessage(String message) {
     if (i + 64 <= message.length()) {
       lastSent.concat(message.substring(i, i + 64));      
       Serial.println(lastSent);
-      lastSent.concat("</E");      
-      addToRepeat(encrypt(lastSent));
-      lastSent=encrypt(lastSent);      
+      lastSent.concat(F("</E"));      
+      addToSend(encrypt(lastSent));    
     } else {
       lastSent.concat(message.substring(i, i + message.length()+1));
-      lastSent.concat(" (*END OF ");
+      lastSent.concat(F(" (*END OF "));
       lastSent.concat(inc);
-      lastSent.concat(" PARTS*)");
+      lastSent.concat(F(" PARTS*)"));
       Serial.println(lastSent);
-      lastSent.concat("</E");      
-      addToRepeat(encrypt(lastSent));
-      lastSent=encrypt(lastSent);      
+      lastSent.concat(F("</E"));      
+      addToSend(encrypt(lastSent));   
     }
     
     i += 64;
@@ -428,7 +454,6 @@ void sendMessage(String message) {
 }
 
 void sendBroadcast(String outs) {
-  addToSent(outs);
   LoRa.beginPacket();                   // start packet
   LoRa.write(destination);              // add destination address
   LoRa.write(localAddress);             // add sender address
@@ -479,27 +504,26 @@ void onReceive(int packetSize) {
 
     // check to see if this message is in the 'to repeat' list
     boolean show = true;
-      
-    // do not show distant echoes of what was last sent from this node
-    if (sentAlready(incoming))
-      show = false;
     
     // repeater filter
-    if (!sentAlready(incoming)) {
-      lastReceivedTime = millis();
-      if (imsg.indexOf("Ping from ")!=0)
-        addToRepeat(incoming);            
+    if (!sentAlready(incoming)) {      
+      if (imsg.indexOf("Ping from ")!=0){
+        addToSend(incoming);
+        //lastReceivedTime = millis();
+      }            
     } else {
-      // do not show repeated message if it was posted under 5 seconds ago
-      if ((millis() - lastReceivedTime) < 7000)
+      // do not show repeated message if it was posted under 14 seconds ago
+      //if ((millis() - lastReceivedTime) < 14000)
         show = false;
-    }    
+    }   
 
     if (Serial && show) {
-      Serial.print("[RSSI: " + String(LoRa.packetRssi()));
-      Serial.print("]");
-      Serial.print(" [SNR: " + String(LoRa.packetSnr()));
-      Serial.println("]");
+      Serial.print(F("[RSSI: "));
+      Serial.print(String(LoRa.packetRssi()));
+      Serial.print(F("]"));
+      Serial.print(F(" [SNR: ")); 
+      Serial.print(String(LoRa.packetSnr()));
+      Serial.println(F("]"));
       Serial.println(imsg);
     }
 
