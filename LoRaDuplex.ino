@@ -118,7 +118,7 @@ void loop() {
       String pingStr=F("Ping from ");
       pingStr.concat(thisIs);
       pingStr.concat(F(" </E"));
-      addToSend(encrypt(pingStr));
+      addToSend(encrypt(pingStr), true);
       Serial.println(F("Pinging out..."));
     }
   }
@@ -207,7 +207,7 @@ void sender() {
       String checkSend = String((char *)theSender.messages[inc].mdata);        
       if (!checkSend.equals("")) {
         lastSendTime = millis();
-        interval = random(2000) + 1500;
+        interval = random(3000) + 2000;
         if (Serial && verb){
           Serial.print(F("Sending #"));
           Serial.print(inc);
@@ -227,24 +227,27 @@ void sender() {
   sending = false;
 }
 
-void addToSend(String incoming) {
+void addToSend(String incoming, bool checkList) {
 
-  // add to stack if not already in the repeat list
   int inc = 0;
   boolean found = false;
-  while (inc < 8) {    
-    if (theSender.messages[inc].mdata[0]!=char(0)){
-      String checkSend = String((char *)theSender.messages[inc].mdata);    
-      if (checkSend.equals(incoming))
-        found = true;
+
+  if (checkList){
+    // add to stack if not already in the repeat list    
+    while (inc < 8) {    
+      if (theSender.messages[inc].mdata[0]!=char(0)){
+        String checkSend = String((char *)theSender.messages[inc].mdata);    
+        if (checkSend.equals(incoming))
+          found = true;
+      }
+      inc++;
     }
-    inc++;
+    
+    // already in the stack
+    if (found)
+      return;
   }
   
-  // already in the stack
-  if (found)
-    return;
-
   sending = true;
 
   // add to the stack if there is a spot available
@@ -351,11 +354,13 @@ void doBuzzer() {
 
 void sendMessage(String message) {
   String lastSent = "";
-  if (message.length() <= 61) {
+  if (message.length() <= 47) {
     lastSent=message;
     Serial.println(lastSent);
-    lastSent.concat("</E");
-    addToSend(encrypt(lastSent));
+    lastSent.concat(F("</E"));
+    addToSend(encrypt(lastSent), false);
+    addToSend(encrypt(lastSent), false);
+    addToSend(encrypt(lastSent), false); 
     return;
   }
 
@@ -371,11 +376,12 @@ void sendMessage(String message) {
     pre.concat(": ");
     lastSent = pre;
     
-    if (i + 64 <= message.length()) {
-      lastSent.concat(message.substring(i, i + 64));      
+    if (i + 37 < message.length()) {
+      lastSent.concat(message.substring(i, i + 37));      
       Serial.println(lastSent);
       lastSent.concat(F("</E"));      
-      addToSend(encrypt(lastSent));    
+      addToSend(encrypt(lastSent), false);
+      addToSend(encrypt(lastSent), false);    
     } else {
       lastSent.concat(message.substring(i, i + message.length()+1));
       lastSent.concat(F(" (*END OF "));
@@ -383,10 +389,11 @@ void sendMessage(String message) {
       lastSent.concat(F(" PARTS*)"));
       Serial.println(lastSent);
       lastSent.concat(F("</E"));      
-      addToSend(encrypt(lastSent));   
+      addToSend(encrypt(lastSent), false);
+      addToSend(encrypt(lastSent), false);    
     }
     
-    i += 64;
+    i += 37;
     inc++;
   }
 
@@ -448,7 +455,7 @@ void onReceive(int packetSize) {
     // repeater filter
     if (!sentAlready(incoming)) {      
       if (imsg.indexOf("Ping from ")!=0){
-        addToSend(incoming);
+        addToSend(incoming, true);
         //lastReceivedTime = millis();
       }            
     } else {
