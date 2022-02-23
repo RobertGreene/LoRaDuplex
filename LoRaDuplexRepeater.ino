@@ -70,6 +70,7 @@ void setup() {
 
   // override the default CS, reset, and IRQ pins (optional)
   LoRa.setPins(SS, RST, DI0); // set CS, reset, IRQ pin
+  LoRa.setTxPower(20); //20dB output
 
   if (!LoRa.begin(BAND, PABOOST)) {            // initialize ratio at 915 MHz
     if (Serial)
