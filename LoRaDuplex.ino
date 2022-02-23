@@ -2,10 +2,6 @@
 #include <SPI.h>              // include libraries
 #include <LoRa.h>
 
-
-// uncomment the section corresponding to your board
-// BSFrance 2017 contact@bsrance.fr
-
 //  //LoR32u4 433MHz V1.0 (white board)
 //  #define SCK     15
 //  #define MISO    14
