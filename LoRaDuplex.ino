@@ -51,7 +51,7 @@ bool verb=false;
 
 struct mdata{
   char mdata[65];
-  bool sent = false;
+  bool sent = true;
 };
 struct sendMessages{
   mdata messages[8];  
@@ -71,7 +71,7 @@ void setup() {
  
   int inc=0;
   while (inc < 8){
-    theSender.messages[inc].mdata[0]=char(0);
+    theSender.messages[inc].mdata[0]=F(" ");
     theSender.messages[inc].mdata[1]=char(0);
     theSender.messages[inc].sent = true;    
     inc++;
@@ -118,7 +118,7 @@ void loop() {
       String pingStr=F("Ping from ");
       pingStr.concat(thisIs);
       pingStr.concat(F(" </E"));
-      addToSend(encrypt(pingStr), true);
+      addToSend(encrypt(pingStr));
       Serial.println(F("Pinging out..."));
     }
   }
@@ -155,41 +155,45 @@ boolean command_helper(String cmd) {
 
   cmd.trim();
 
-  if (cmd.equals("?")) {
+  if (cmd.equals(F("?"))) {
     Serial.println(F("**********HELP MENU**********"));
     Serial.println(F("ping - ping out every 10 seconds until stop command"));
-    Serial.println(F("stop - use stop after various commands that repeat to stop them"));
+    Serial.println(F("stop - stop pinging"));
+    Serial.println(F("handle <name> - change your name/handle"));
     Serial.println(F("channel <1-10> - change the channel ie: channel 2"));
     Serial.println(F("debug - verbose: prints out log information while in use"));
     Serial.println(F("*****************************"));
     return true;
   }
 
-  if (cmd.indexOf("channel ") == 0) {
-
-    cmd = splitAt(cmd, "channel ");
-    int str_len = cmd.length() + 1;
-    char buf[str_len];
-    cmd.toCharArray(buf, str_len);
-    int channel = atoi(buf);
+  if (cmd.indexOf(F("channel ")) == 0) {
+    cmd = splitAt(cmd, F("channel "));
+    int channel = cmd.toInt();
     channelSelector(channel);
-
     return true;
   }
 
-  if (cmd.equals("ping")) {
+  if (cmd.indexOf(F("handle ")) == 0) {
+    cmd = splitAt(cmd, F("handle "));
+    changeName(cmd);
+    Serial.print(F("Changed handle/name to "));
+    Serial.println(cmd);
+    return true;
+  }
+
+  if (cmd.equals(F("ping"))) {
     Serial.println(F("Starting ping, type 'stop' to stop pinging"));
     pinging = true;
     return true;
   }
 
-  if (cmd.equals("stop")) {
-    Serial.println(F("Stopping..."));
+  if (cmd.equals(F("stop"))) {
+    Serial.println(F("Stopping ping..."));
     pinging = false;
     return true;
   }
 
-  if (cmd.equals("debug")) {
+  if (cmd.equals(F("debug"))) {
     Serial.println(F("Debug/Verbose mode toggled"));
     verb = !verb;    
     return true;
@@ -203,21 +207,19 @@ void sender() {
   // pop off the stack
   int inc = 0;
   while (inc < 8) {
-    if(theSender.messages[inc].mdata[0]!=char(0)  && !theSender.messages[inc].sent  ){
-      String checkSend = String((char *)theSender.messages[inc].mdata);        
-      if (!checkSend.equals("")) {
-        lastSendTime = millis();
-        interval = random(3000) + 2000;
-        if (Serial && verb){
-          Serial.print(F("Sending #"));
-          Serial.print(inc);
-          Serial.print(F(" "));
-          Serial.println((char *)theSender.messages[inc].mdata);
-        }
-        sendBroadcast(checkSend);
-        theSender.messages[inc].sent = true;       
-        return;
+    if(!theSender.messages[inc].sent){
+      String checkSend = String((char *)theSender.messages[inc].mdata);
+      lastSendTime = millis();
+      interval = random(3000) + 2000;
+      if (Serial && verb){
+        Serial.print(F("Sending #"));
+        Serial.print(inc);
+        Serial.print(F(" "));
+        Serial.println((char *)theSender.messages[inc].mdata);
       }
+      sendBroadcast(checkSend);
+      theSender.messages[inc].sent = true;       
+      return;
     }
     inc++;
   }
@@ -227,29 +229,10 @@ void sender() {
   sending = false;
 }
 
-void addToSend(String incoming, bool checkList) {
-
-  int inc = 0;
-  boolean found = false;
-
-  if (checkList){
-    // add to stack if not already in the repeat list    
-    while (inc < 8) {    
-      if (theSender.messages[inc].mdata[0]!=char(0)){
-        String checkSend = String((char *)theSender.messages[inc].mdata);    
-        if (checkSend.equals(incoming))
-          found = true;
-      }
-      inc++;
-    }
-    
-    // already in the stack
-    if (found)
-      return;
-  }
+void addToSend(String incoming) {
   
-  sending = true;
-
+  sending = true;  
+  int inc = 0;
   // add to the stack if there is a spot available
   inc = 0;
   while (inc < 8) {
@@ -273,11 +256,9 @@ void addToSend(String incoming, bool checkList) {
 boolean sentAlready(String checkStr){
   int inc = 0;
   while (inc < 8) {    
-    if (theSender.messages[inc].mdata[0]!=char(0)){
-      String checkSend = String((char *)theSender.messages[inc].mdata);    
-      if (checkSend.equals(checkStr))
-        return true;
-    }
+    String checkSend = String((char *)theSender.messages[inc].mdata);    
+    if (checkSend.equals(checkStr))
+      return true;
     inc++;
   }
   return false;
@@ -353,35 +334,35 @@ void doBuzzer() {
 }
 
 void sendMessage(String message) {
-  String lastSent = "";
+  String lastSent = F("");
   if (message.length() <= 47) {
     lastSent=message;
     Serial.println(lastSent);
     lastSent.concat(F("</E"));
-    addToSend(encrypt(lastSent), false);
-    addToSend(encrypt(lastSent), false);
-    addToSend(encrypt(lastSent), false); 
+    addToSend(encrypt(lastSent));
+    addToSend(encrypt(lastSent));
+    addToSend(encrypt(lastSent)); 
     return;
   }
 
-  message = splitAt(message, thisIs+": ");
+  message = splitAt(message, thisIs+F(": "));
   
   int i = 0;
   int inc = 1;
   while (i <= message.length()) {
-    String pre = "Part #";
+    String pre = F("Part #");
     pre.concat(inc);
-    pre.concat(" - ");
+    pre.concat(F(" - "));
     pre.concat(thisIs);
-    pre.concat(": ");
+    pre.concat(F(": "));
     lastSent = pre;
     
     if (i + 37 < message.length()) {
       lastSent.concat(message.substring(i, i + 37));      
       Serial.println(lastSent);
       lastSent.concat(F("</E"));      
-      addToSend(encrypt(lastSent), false);
-      addToSend(encrypt(lastSent), false);    
+      addToSend(encrypt(lastSent));
+      addToSend(encrypt(lastSent));    
     } else {
       lastSent.concat(message.substring(i, i + message.length()+1));
       lastSent.concat(F(" (*END OF "));
@@ -389,8 +370,8 @@ void sendMessage(String message) {
       lastSent.concat(F(" PARTS*)"));
       Serial.println(lastSent);
       lastSent.concat(F("</E"));      
-      addToSend(encrypt(lastSent), false);
-      addToSend(encrypt(lastSent), false);    
+      addToSend(encrypt(lastSent));
+      addToSend(encrypt(lastSent));    
     }
     
     i += 37;
@@ -421,10 +402,13 @@ void onReceive(int packetSize) {
   byte incomingLength = LoRa.read();    // incoming msg length
 
   String incoming = "";
-
-  while (LoRa.available()) 
-    incoming += (char)LoRa.read();
-
+  while (LoRa.available()) {
+     if (incomingLength>65)
+        char c = (char)LoRa.read();
+     else
+        incoming += (char)LoRa.read();
+  }
+  
   /*if (incomingLength != incoming.length()) {   // check length for error
     Serial.println("error: message length does not match length");
     return;                             // skip rest of function
@@ -438,10 +422,10 @@ void onReceive(int packetSize) {
 
   String imsg = decrypt(incoming);
   
-  if (imsg.indexOf("</E") > -1) {
+  if (imsg.indexOf(F("</E")) > -1) {
 
     //doBuzzer();
-    imsg = imsg.substring(0, imsg.indexOf("</E"));
+    imsg = imsg.substring(0, imsg.indexOf(F("</E")));
 
     // if message is for this device, or broadcast, print details:
     //Serial.println("Received from: 0x" + String(sender, HEX));
@@ -454,14 +438,19 @@ void onReceive(int packetSize) {
     
     // repeater filter
     if (!sentAlready(incoming)) {      
-      if (imsg.indexOf("Ping from ")!=0){
-        addToSend(incoming, true);
+      if (imsg.indexOf(F("Ping from "))!=0){
+        addToSend(incoming);
         //lastReceivedTime = millis();
       }            
     } else {
       // do not show repeated message if it was posted under 14 seconds ago
       //if ((millis() - lastReceivedTime) < 14000)
         show = false;
+        if (Serial && verb){
+          Serial.println(F("Another device heard and repeated:"));
+          Serial.println(imsg);
+        }
+          
     }   
 
     if (Serial && show) {
