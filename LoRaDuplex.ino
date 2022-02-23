@@ -197,7 +197,7 @@ boolean command_helper(String cmd) {
       }
       inc++;
     }
-    Serial.println("End of heard messages");      
+    Serial.println(F("End of heard messages"));      
     return true;
   }
 
@@ -338,6 +338,8 @@ void changeName(String name) {
 }
 
 void sendMessage(String message) {
+
+  message.trim();
   String lastSent = F("");
   if (message.length() <= 47) {
     lastSent=message;
@@ -354,31 +356,33 @@ void sendMessage(String message) {
   int i = 0;
   int inc = 1;
   while (i <= message.length()) {
-    String pre = F("Part #");
+    String pre = F("Part ");
     pre.concat(inc);
-    pre.concat(F(" - "));
+    pre.concat(F(". "));
     pre.concat(thisIs);
     pre.concat(F(": "));
     lastSent = pre;
     
-    if (i + 37 < message.length()) {
-      lastSent.concat(message.substring(i, i + 37));      
+    if (i + 35 < (message.length() - 1)) {
+      lastSent.concat(message.substring(i, i + 35));      
       Serial.println(lastSent);
       lastSent.concat(F("</E"));      
       addToSend(encrypt(lastSent));
       addToSend(encrypt(lastSent));    
     } else {
       lastSent.concat(message.substring(i, i + message.length()+1));
-      lastSent.concat(F(" (*END OF "));
+      lastSent.concat(F(" ("));
       lastSent.concat(inc);
-      lastSent.concat(F(" PARTS*)"));
+      lastSent.concat(F("/"));
+      lastSent.concat(inc);
+      lastSent.concat(F(")"));
       Serial.println(lastSent);
       lastSent.concat(F("</E"));      
       addToSend(encrypt(lastSent));
       addToSend(encrypt(lastSent));    
     }
     
-    i += 37;
+    i += 35;
     inc++;
   }
 
