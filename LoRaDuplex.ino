@@ -40,8 +40,7 @@ long lastSendTime = 0;        // last send time
 //long lastReceivedTime = 0;    // last received time
 int interval = 2000;          // interval between sends
 boolean sending = false;
-String thisIs = "REPEATER";
-const int buzzer = 5;
+String thisIs;
 bool firstRun = true;
 bool verb=false;
 
@@ -64,8 +63,7 @@ int pingInterval = 10000;
 byte channels[10] = { 0xE2, 0xF7, 0xA3, 0xB9, 0xC1, 0xC3, 0xD6, 0xD8, 0xA6, 0xE5 };
 
 void setup() {
-  //pinMode(buzzer, OUTPUT);
- 
+
   int inc=0;
   while (inc < 8){
     theSender.messages[inc].mdata[0]=F(" ");
@@ -73,23 +71,24 @@ void setup() {
     theSender.messages[inc].sent = true;    
     inc++;
   }
+  thisIs = F("REPEAT");
 
   Serial.begin(19200);                   // initialize serial
 
   if (Serial)
-    Serial.println(F("LoRa Duplex"));
+    Serial.println(F("LoRa RGDuplex"));
 
   // override the default CS, reset, and IRQ pins (optional)
   LoRa.setPins(SS, RST, DI0); // set CS, reset, IRQ pin
-
+  LoRa.setTxPower(20); //20dB output
+  
   if (!LoRa.begin(BAND, PABOOST)) {            // initialize ratio at 915 MHz
     if (Serial)
       Serial.println(F("LoRa init failed. Check your connections."));
     while (true);                       // if failed, do nothing
   }
   if (Serial)
-    Serial.println(F("LoRa init succeeded."));
-
+    Serial.println(F("LoRa init succeeded.")); 
 }
 
 void loop() {
@@ -338,16 +337,6 @@ void changeName(String name) {
   thisIs = name;
 }
 
-void doBuzzer() {
-  analogWrite(buzzer, 128);
-  delay(100);
-  analogWrite(buzzer, 0);
-  delay(100);
-  analogWrite(buzzer, 128);
-  delay(100);
-  analogWrite(buzzer, 0);
-}
-
 void sendMessage(String message) {
   String lastSent = F("");
   if (message.length() <= 47) {
@@ -360,7 +349,7 @@ void sendMessage(String message) {
     return;
   }
 
-  message = splitAt(message, thisIs+F(": "));
+  message = splitAt(message, thisIs + F(": "));
   
   int i = 0;
   int inc = 1;
