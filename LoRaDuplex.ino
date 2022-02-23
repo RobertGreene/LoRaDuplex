@@ -48,6 +48,7 @@ bool verb=false;
 struct mdata{
   char mdata[65];
   bool sent = true;
+  bool heard = false;
 };
 struct sendMessages{
   mdata messages[8];  
@@ -157,6 +158,7 @@ boolean command_helper(String cmd) {
     Serial.println(F("stop - stop pinging"));
     Serial.println(F("handle <name> - change your name/handle"));
     Serial.println(F("channel <1-10> - change the channel ie: channel 2"));
+    Serial.println(F("heard - prints out messages heard by other devices"));
     Serial.println(F("debug - verbose: prints out log information while in use"));
     Serial.println(F("*****************************"));
     return true;
@@ -182,6 +184,23 @@ boolean command_helper(String cmd) {
     pinging = true;
     return true;
   }
+  
+  if (cmd.equals(F("heard"))) {
+    Serial.println(F("Messages that were heard by other devices: "));
+    int inc = 0;
+    while (inc < 8){
+      if (theSender.messages[inc].sent && theSender.messages[inc].heard){
+        String heard = String((char *)theSender.messages[inc].mdata);
+        Serial.print(F("Message #"));
+        Serial.print(inc);
+        Serial.print(F(" - "));
+        Serial.println(decrypt(heard).substring(0, decrypt(heard).indexOf(F("</E")) ));
+      }
+      inc++;
+    }
+    Serial.println("End of heard messages");      
+    return true;
+  }
 
   if (cmd.equals(F("stop"))) {
     Serial.println(F("Stopping ping..."));
@@ -199,7 +218,6 @@ boolean command_helper(String cmd) {
 }
 
 void sender() {
-
   // pop off the stack
   int inc = 0;
   while (inc < 8) {
@@ -211,7 +229,7 @@ void sender() {
         Serial.print(F("Sending #"));
         Serial.print(inc);
         Serial.print(F(" "));
-        Serial.println((char *)theSender.messages[inc].mdata);
+        Serial.println(decrypt((char *)theSender.messages[inc].mdata));
       }
       sendBroadcast(checkSend);
       theSender.messages[inc].sent = true;       
@@ -226,8 +244,6 @@ void sender() {
 }
 
 void addToSend(String incoming) {
-  
-  sending = true;  
   int inc = 0;
   // add to the stack if there is a spot available
   inc = 0;
@@ -239,22 +255,25 @@ void addToSend(String incoming) {
         Serial.print(F("Added to Send List #"));
         Serial.print(inc);
         Serial.print(F(" ")); 
-        Serial.println((char *)theSender.messages[inc].mdata);
+        Serial.println(decrypt((char *)theSender.messages[inc].mdata));
       }
-      theSender.messages[inc].sent = false;      
+      sending = true;
+      theSender.messages[inc].sent = false;
+      theSender.messages[inc].heard = false;      
       return;      
     }
     inc++;
-  }
-     
+  }     
 }
 
 boolean sentAlready(String checkStr){
   int inc = 0;
   while (inc < 8) {    
-    String checkSend = String((char *)theSender.messages[inc].mdata);    
-    if (checkSend.equals(checkStr))
+    String checkSend = String((char *)theSender.messages[inc].mdata);     
+    if (checkSend.equals(checkStr)){
+      theSender.messages[inc].heard = true;
       return true;
+    }   
     inc++;
   }
   return false;
