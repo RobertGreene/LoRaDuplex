@@ -1,4 +1,4 @@
-Spent a bit on this hopefully it helps everyone out.
+Spent a bit of time on this, hopefully it helps everyone out.
 
 Duplex - for sending/receiving messages
 +Encrypt/Decrypt
